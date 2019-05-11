@@ -9,15 +9,19 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 )
 
-// TODO set saner defaults for a package of this type
+// TODO set saner defaults for a package of this type & addition of a flattening delimiter
 var config aws.Config
 
 // Dino is the primary workhorse of the package. Contains the reference to the started DynamoDB session.
+// Each instance of Dino represents a single DynamoDB table. Having a single table should be the goal of
+// any application utilizing DynamoDB and is considered best practice. Use Local and Global Secondary Indexes
+// as well as flattening techniques to get the most out of the system.
 type Dino struct {
 	session     *dynamodb.DynamoDB
 	primaryKeys []string
@@ -72,11 +76,11 @@ func (d *Dino) Save(input interface{}) Dino {
 }
 
 // Error returns any errors from the last performed action
-func (d Dino) Error() error {
+func (d *Dino) Error() error {
 	return d.LastAction.Error
 }
 
-func (d Dino) snapshot() instanceState {
+func (d *Dino) snapshot() instanceState {
 	return instanceState{
 		session:     *d.session,
 		primaryKeys: d.primaryKeys,
@@ -91,6 +95,7 @@ func (d *Dino) saveMap(input interface{}) {
 	d.LastAction.ExecutedAt = time.Now().UTC()
 	d.LastAction.Snapshot = d.snapshot()
 
+	// TODO we can use the reflect.Value.MapRange function over strongly typing
 	inputMap := input.(map[string]interface{})
 
 	// check for specified primaryKeys
@@ -101,6 +106,13 @@ func (d *Dino) saveMap(input interface{}) {
 			d.LastAction.Error = fmt.Errorf("required table key missing: %s", key)
 			return
 		}
+	}
+
+	// TODO flattening option to config
+	flattenMap(inputMap)
+
+	if inputMap == nil {
+		d.LastAction.Error = errors.New("error flattening map")
 	}
 
 	// marshal and send
@@ -121,6 +133,40 @@ func (d *Dino) saveMap(input interface{}) {
 	_, err = d.session.PutItem(&request)
 	if err != nil {
 		d.LastAction.Error = err
+	}
+
+	return
+}
+
+// TODO Handle a more broad range of nested map types.
+// TODO Need to figure out how best to have flatten map and flatten struct work together
+// TODO Benchmark the hell out of this. It cannot be slow
+func flattenMap(i interface{}) {
+	if reflect.ValueOf(i).Kind() != reflect.Map {
+		return
+	}
+
+	// TODO handle a more broad set of map types. Might have to build a new map?
+	input := i.(map[string]interface{})
+
+	for key, value := range input {
+		kind := reflect.ValueOf(value).Kind()
+		if kind != reflect.Map {
+			continue
+		}
+
+		iter := reflect.ValueOf(value).MapRange()
+
+		for iter.Next() {
+			k := iter.Key()
+
+			// OH DAMN Stumbled upon what I wanted accidentally. I need to catch any nested
+			// maps - because the key I'm adding to the map hasn't yet been iterated over
+			// nesting is handled automatically for me as every time I add a new key  it is
+			// guaranteed it will be checked
+			newKey := fmt.Sprintf("%s#%v", key, k.String())
+			input[newKey] = iter.Value().Interface()
+		}
 	}
 
 	return
