@@ -17,8 +17,8 @@ func TestFlattenMap(t *testing.T) {
 	test["test"] = map[string]interface{}{"inner": "inner2"}
 	test["test#inner"] = "inner2"
 
-	flattenMap(control)
-	assert.Equal(t, test, control, "simple string")
+	check := flattenMap(control)
+	assert.Equal(t, test, check, "simple string")
 
 	control = map[string]interface{}{}
 	control["test"] = map[string]interface{}{"inner": 2,
@@ -31,8 +31,8 @@ func TestFlattenMap(t *testing.T) {
 	test["test#inner"] = 2
 	test["test#inner'er"] = []string{"test"}
 
-	flattenMap(control)
-	assert.Equal(t, test, control, "integer and slice")
+	check = flattenMap(control)
+	assert.Equal(t, test, check, "integer and slice")
 
 	// Struct management (non nested)
 	type sampleStruct struct {
@@ -53,8 +53,8 @@ func TestFlattenMap(t *testing.T) {
 	test["test#inner'er"] = []string{"test"}
 	test["test#sample struct"] = sampleStruct{Name: "John"}
 
-	flattenMap(control)
-	assert.Equal(t, test, control, "struct")
+	check = flattenMap(control)
+	assert.Equal(t, test, check, "struct")
 }
 
 func TestFlattenMapNested(t *testing.T) {
@@ -68,6 +68,6 @@ func TestFlattenMapNested(t *testing.T) {
 	test["upper#middle#lower"] = map[string]interface{}{"lowest": "lowest value"}
 	test["upper#middle#lower#lowest"] = "lowest value"
 
-	flattenMap(control)
-	assert.Equal(t, test, control, "nested")
+	check := flattenMap(control)
+	assert.Equal(t, test, check, "nested")
 }

@@ -138,16 +138,25 @@ func (d *Dino) saveMap(input interface{}) {
 	return
 }
 
-// TODO Handle a more broad range of nested map types.
 // TODO Need to figure out how best to have flatten map and flatten struct work together
-// TODO Benchmark the hell out of this. It cannot be slow
-func flattenMap(i interface{}) {
-	if reflect.ValueOf(i).Kind() != reflect.Map {
-		return
+// TODO Benchmark the hell out of this. It cannot be slow - if we can change values in place
+// on the parent map let's do so
+func flattenMap(i interface{}) interface{} {
+	inValue := reflect.ValueOf(i)
+
+	if inValue.Kind() != reflect.Map {
+		return i
 	}
 
-	// TODO handle a more broad set of map types. Might have to build a new map?
-	input := i.(map[string]interface{})
+	input := map[string]interface{}{}
+	safeLoop := inValue.MapRange()
+
+	for safeLoop.Next() {
+		key := safeLoop.Key()
+		value := safeLoop.Value()
+
+		input[key.String()] = value.Interface()
+	}
 
 	for key, value := range input {
 		kind := reflect.ValueOf(value).Kind()
@@ -169,5 +178,5 @@ func flattenMap(i interface{}) {
 		}
 	}
 
-	return
+	return input
 }
