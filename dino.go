@@ -8,6 +8,7 @@ import (
 	"log"
 	"reflect"
 	"time"
+	"unicode"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
@@ -89,16 +90,31 @@ func (d *Dino) snapshot() instanceState {
 	}
 }
 
-func (d *Dino) saveMap(input interface{}) {
-	d.LastAction.Input = input
+func (d *Dino) saveMap(in interface{}) {
+	d.LastAction.Input = in
 	d.LastAction.RawAction = d.saveMap
 	d.LastAction.ExecutedAt = time.Now().UTC()
 	d.LastAction.Snapshot = d.snapshot()
 
 	// TODO we can use the reflect.Value.MapRange function over strongly typing
-	inputMap := input.(map[string]interface{})
+	inValue := reflect.ValueOf(in)
 
-	// check for specified primaryKeys
+	if inValue.Kind() != reflect.Map {
+		return
+	}
+
+	inputMap := map[string]interface{}{}
+	safeLoop := inValue.MapRange()
+
+	for safeLoop.Next() {
+		key := safeLoop.Key()
+		value := safeLoop.Value()
+
+		inputMap[key.String()] = value.Interface()
+	}
+
+	// check for specified primaryKeys TODO: consider the possibility of the primary key being
+	// a composite of nested structures. Potential we don't want even this constraint for the struct
 	for _, key := range d.primaryKeys {
 		_, ok := inputMap[key]
 
@@ -160,23 +176,80 @@ func flattenMap(i interface{}) interface{} {
 
 	for key, value := range input {
 		kind := reflect.ValueOf(value).Kind()
-		if kind != reflect.Map {
+
+		switch kind {
+		case reflect.Map:
+			iter := reflect.ValueOf(value).MapRange()
+
+			for iter.Next() {
+				k := iter.Key()
+
+				// OH DAMN Stumbled upon what I wanted accidentally. I need to catch any nested
+				// maps - because the key I'm adding to the map hasn't yet been iterated over
+				// nesting is handled automatically for me as every time I add a new key  it is
+				// guaranteed it will be checked
+				newKey := fmt.Sprintf("%s#%v", key, k.String())
+				input[newKey] = iter.Value().Interface()
+			}
+
+		case reflect.Struct:
+			flatStruct := flattenStruct(value)
+
+			for key, value := range flatStruct {
+				input[key] = value
+			}
+
+		default:
 			continue
 		}
 
-		iter := reflect.ValueOf(value).MapRange()
-
-		for iter.Next() {
-			k := iter.Key()
-
-			// OH DAMN Stumbled upon what I wanted accidentally. I need to catch any nested
-			// maps - because the key I'm adding to the map hasn't yet been iterated over
-			// nesting is handled automatically for me as every time I add a new key  it is
-			// guaranteed it will be checked
-			newKey := fmt.Sprintf("%s#%v", key, k.String())
-			input[newKey] = iter.Value().Interface()
-		}
 	}
 
 	return input
+}
+
+// TODO the goal here is to get a struct paired down to a map[string]interface
+// though tempted, don't do anything super crazy right now. Basic struct tags for naming
+// conventions, primary keys, omit,
+// TODO need to weed out unexported fields
+func flattenStruct(in interface{}) map[string]interface{} {
+	output := map[string]interface{}{}
+	inType := reflect.TypeOf(in)
+
+	if reflect.ValueOf(in).Kind() != reflect.Struct {
+		return output
+	}
+
+	totalFields := inType.NumField()
+	structName := inType.Name()
+	fieldList := []reflect.StructField{}
+
+	for i := 0; i < totalFields; i++ {
+		fieldList = append(fieldList, inType.Field(i))
+	}
+
+	for i, field := range fieldList {
+		tags, ok := field.Tag.Lookup("dino")
+
+		if ok {
+			if tags == "-" {
+				continue
+			}
+		}
+
+		// ignore private fields
+		if !unicode.IsUpper(rune(field.Name[0])) {
+			continue
+		}
+
+		// TODO uncaught edgecases for handling all int types
+		if reflect.ValueOf(in).Field(i).Kind() == reflect.Int {
+			output[fmt.Sprintf("%s#%s", structName, field.Name)] = reflect.ValueOf(in).Field(i).Int()
+			continue
+		}
+
+		output[fmt.Sprintf("%s#%s", structName, field.Name)] = reflect.ValueOf(in).Field(i).Interface()
+	}
+
+	return output
 }

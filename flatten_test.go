@@ -8,6 +8,7 @@ import (
 
 // TODO Clean the test cases up, build generators for these kind of nested
 // cases. Or write them in json (much easier)
+// TODO YOU CANNOT RELIABELY DEEP EQUAL TEST MAPS! Redo the tests to reflecct that
 func TestFlattenMap(t *testing.T) {
 	control := map[string]interface{}{}
 	control["test"] = map[string]interface{}{"inner": "inner2"}
