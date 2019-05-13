@@ -70,5 +70,13 @@ func TestFlattenMapNested(t *testing.T) {
 	test["upper#middle#lower#lowest"] = "lowest value"
 
 	check := flattenMap(control)
-	assert.Equal(t, test, check, "nested")
+	assert.Equal(t, check.(map[string]interface{})["upper#middle"], test["upper#middle"])
+	assert.Equal(t, check.(map[string]interface{})["upper#middle#lower"], test["upper#middle#lower"])
+	assert.Equal(t, check.(map[string]interface{})["upper#middle#lower#lowest"], test["upper#middle#lower#lowest"])
+}
+
+// NEEDED CASES
+// struct with another embedded struct within it
+// stuct with map and slice types embedded
+func TestFlattenStruct(t *testing.T) {
 }

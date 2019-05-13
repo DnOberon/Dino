@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"reflect"
+	"strings"
 	"time"
 	"unicode"
 
@@ -90,13 +91,79 @@ func (d *Dino) snapshot() instanceState {
 	}
 }
 
+func (d *Dino) saveStruct(in interface{}) {
+	d.LastAction.Input = in
+	d.LastAction.RawAction = d.saveMap
+	d.LastAction.ExecutedAt = time.Now().UTC()
+	d.LastAction.Snapshot = d.snapshot()
+
+	// check for primary key(s) use first field if not - still need to test against all
+	// types
+	inType := reflect.TypeOf(in)
+	var primaryKey string
+
+	if reflect.ValueOf(in).Kind() != reflect.Struct {
+		return
+	}
+
+	totalFields := inType.NumField()
+	taggedFields := []reflect.StructField{}
+
+	for i := 0; i < totalFields; i++ {
+		// ignore private fields
+		if !unicode.IsUpper(rune(inType.Field(i).Name[0])) {
+			continue
+		}
+
+		_, ok := inType.Field(i).Tag.Lookup("dino")
+		if ok {
+			taggedFields = append(taggedFields, inType.Field(i))
+		}
+	}
+
+	for _, field := range taggedFields {
+		tag, _ := field.Tag.Lookup("dino")
+
+		if strings.Contains(tag, "primarykey") {
+			primaryKey = field.Name
+		}
+	}
+
+	if primaryKey == "" {
+		d.LastAction.Error = fmt.Errorf("required table keys missing: %v", d.primaryKeys)
+		return
+	}
+
+	toSave := flattenMap(flattenStruct(in))
+
+	// marshal and send
+	result, err := dynamodbattribute.MarshalMap(toSave)
+	if err != nil {
+		// TODO issue #12 accept logger interface, default to stdout
+		log.Printf("%s", err.Error())
+		return
+	}
+
+	request := dynamodb.PutItemInput{
+		// ConditionExpression: TODO issue #13 should we accept condtion expressions
+		Item:      result,
+		TableName: d.tableName,
+	}
+
+	// TODO use item output in issue #11 - self consumed capacity management
+	_, err = d.session.PutItem(&request)
+	if err != nil {
+		d.LastAction.Error = err
+	}
+
+}
+
 func (d *Dino) saveMap(in interface{}) {
 	d.LastAction.Input = in
 	d.LastAction.RawAction = d.saveMap
 	d.LastAction.ExecutedAt = time.Now().UTC()
 	d.LastAction.Snapshot = d.snapshot()
 
-	// TODO we can use the reflect.Value.MapRange function over strongly typing
 	inValue := reflect.ValueOf(in)
 
 	if inValue.Kind() != reflect.Map {
@@ -114,7 +181,7 @@ func (d *Dino) saveMap(in interface{}) {
 	}
 
 	// check for specified primaryKeys TODO: consider the possibility of the primary key being
-	// a composite of nested structures. Potential we don't want even this constraint for the struct
+	// a composite of nested structures. Potential we don't want even this constraint for the map type
 	for _, key := range d.primaryKeys {
 		_, ok := inputMap[key]
 
@@ -152,104 +219,4 @@ func (d *Dino) saveMap(in interface{}) {
 	}
 
 	return
-}
-
-// TODO Need to figure out how best to have flatten map and flatten struct work together
-// TODO Benchmark the hell out of this. It cannot be slow - if we can change values in place
-// on the parent map let's do so
-func flattenMap(i interface{}) interface{} {
-	inValue := reflect.ValueOf(i)
-
-	if inValue.Kind() != reflect.Map {
-		return i
-	}
-
-	input := map[string]interface{}{}
-	safeLoop := inValue.MapRange()
-
-	for safeLoop.Next() {
-		key := safeLoop.Key()
-		value := safeLoop.Value()
-
-		input[key.String()] = value.Interface()
-	}
-
-	for key, value := range input {
-		kind := reflect.ValueOf(value).Kind()
-
-		switch kind {
-		case reflect.Map:
-			iter := reflect.ValueOf(value).MapRange()
-
-			for iter.Next() {
-				k := iter.Key()
-
-				// OH DAMN Stumbled upon what I wanted accidentally. I need to catch any nested
-				// maps - because the key I'm adding to the map hasn't yet been iterated over
-				// nesting is handled automatically for me as every time I add a new key  it is
-				// guaranteed it will be checked
-				newKey := fmt.Sprintf("%s#%v", key, k.String())
-				input[newKey] = iter.Value().Interface()
-			}
-
-		case reflect.Struct:
-			flatStruct := flattenStruct(value)
-
-			for key, value := range flatStruct {
-				input[key] = value
-			}
-
-		default:
-			continue
-		}
-
-	}
-
-	return input
-}
-
-// TODO the goal here is to get a struct paired down to a map[string]interface
-// though tempted, don't do anything super crazy right now. Basic struct tags for naming
-// conventions, primary keys, omit,
-// TODO need to weed out unexported fields
-func flattenStruct(in interface{}) map[string]interface{} {
-	output := map[string]interface{}{}
-	inType := reflect.TypeOf(in)
-
-	if reflect.ValueOf(in).Kind() != reflect.Struct {
-		return output
-	}
-
-	totalFields := inType.NumField()
-	structName := inType.Name()
-	fieldList := []reflect.StructField{}
-
-	for i := 0; i < totalFields; i++ {
-		fieldList = append(fieldList, inType.Field(i))
-	}
-
-	for i, field := range fieldList {
-		tags, ok := field.Tag.Lookup("dino")
-
-		if ok {
-			if tags == "-" {
-				continue
-			}
-		}
-
-		// ignore private fields
-		if !unicode.IsUpper(rune(field.Name[0])) {
-			continue
-		}
-
-		// TODO uncaught edgecases for handling all int types
-		if reflect.ValueOf(in).Field(i).Kind() == reflect.Int {
-			output[fmt.Sprintf("%s#%s", structName, field.Name)] = reflect.ValueOf(in).Field(i).Int()
-			continue
-		}
-
-		output[fmt.Sprintf("%s#%s", structName, field.Name)] = reflect.ValueOf(in).Field(i).Interface()
-	}
-
-	return output
 }
