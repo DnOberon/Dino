@@ -3,6 +3,7 @@ package dino
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"unicode"
 )
 
@@ -45,7 +46,7 @@ func flattenMap(i interface{}) interface{} {
 			}
 
 		case reflect.Struct:
-			flatStruct := flattenStruct(value)
+			flatStruct := flattenStruct(value, 1)
 
 			for key, value := range flatStruct {
 				input[key] = value
@@ -63,7 +64,7 @@ func flattenMap(i interface{}) interface{} {
 // TODO the goal here is to get a struct paired down to a map[string]interface
 // though tempted, don't do anything super crazy right now. Basic struct tags for naming
 // conventions, primary keys, omit,
-func flattenStruct(in interface{}) map[string]interface{} {
+func flattenStruct(in interface{}, level int) map[string]interface{} {
 	output := map[string]interface{}{}
 	inType := reflect.TypeOf(in)
 
@@ -93,13 +94,20 @@ func flattenStruct(in interface{}) map[string]interface{} {
 			continue
 		}
 
+		formattedKey := fmt.Sprintf("%s#%s", structName, strings.ToLower(field.Name))
+
+		// if considered root level, don't append the struct name
+		if level == 0 {
+			formattedKey = strings.ToLower(field.Name)
+		}
+
 		// TODO uncaught edgecases for handling all int types
 		if reflect.ValueOf(in).Field(i).Kind() == reflect.Int {
-			output[fmt.Sprintf("%s#%s", structName, field.Name)] = reflect.ValueOf(in).Field(i).Int()
+			output[formattedKey] = reflect.ValueOf(in).Field(i).Int()
 			continue
 		}
 
-		output[fmt.Sprintf("%s#%s", structName, field.Name)] = reflect.ValueOf(in).Field(i).Interface()
+		output[formattedKey] = reflect.ValueOf(in).Field(i).Interface()
 	}
 
 	return output

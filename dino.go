@@ -69,6 +69,8 @@ func (d *Dino) Save(input interface{}) Dino {
 	switch reflect.ValueOf(input).Kind() {
 	case reflect.Map:
 		d.saveMap(input)
+	case reflect.Struct:
+		d.saveStruct(input)
 
 	default:
 		d.LastAction.Error = fmt.Errorf("unacceptable input type : %s", reflect.ValueOf(input).Kind())
@@ -134,7 +136,7 @@ func (d *Dino) saveStruct(in interface{}) {
 		return
 	}
 
-	toSave := flattenMap(flattenStruct(in))
+	toSave := flattenMap(flattenStruct(in, 0))
 
 	// marshal and send
 	result, err := dynamodbattribute.MarshalMap(toSave)
@@ -192,14 +194,14 @@ func (d *Dino) saveMap(in interface{}) {
 	}
 
 	// TODO flattening option to config
-	flattenMap(inputMap)
+	nowFlat := flattenMap(inputMap)
 
-	if inputMap == nil {
+	if nowFlat == nil {
 		d.LastAction.Error = errors.New("error flattening map")
 	}
 
 	// marshal and send
-	result, err := dynamodbattribute.MarshalMap(inputMap)
+	result, err := dynamodbattribute.MarshalMap(nowFlat)
 	if err != nil {
 		// TODO issue #12 accept logger interface, default to stdout
 		log.Printf("%s", err.Error())
