@@ -1,7 +1,6 @@
 package dino
 
 import (
-	"log"
 	"testing"
 	"time"
 
@@ -39,5 +38,4 @@ func TestStructSave(t *testing.T) {
 	test.Flotsom = testInner
 
 	d.Save(test)
-	log.Println(d.LastAction)
 }

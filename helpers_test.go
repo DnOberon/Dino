@@ -15,6 +15,10 @@ type TestOuterPerson struct {
 	Flotsom      interface{}
 }
 
+func (p TestOuterPerson) AfterSave() error {
+	return nil
+}
+
 func structAllTypes() TestOuterPerson {
 	return TestOuterPerson{uuid.New().String(), "John", 12, time.Now(), "Ignored", ""}
 }
