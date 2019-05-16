@@ -162,9 +162,7 @@ func (d *Dino) saveStruct(in interface{}) {
 		d.LastAction.Error = err
 	}
 
-	saverType := reflect.TypeOf((*saver)(nil)).Elem()
-
-	does := inType.Implements(saverType)
+	does := inType.Implements(reflect.TypeOf((*saver)(nil)).Elem())
 
 	if does {
 		method, ok := inType.MethodByName("AfterSave")
@@ -194,6 +192,7 @@ func (d *Dino) saveMap(in interface{}) {
 	d.LastAction.Snapshot = d.snapshot()
 
 	inValue := reflect.ValueOf(in)
+	inType := reflect.TypeOf(in)
 
 	if inValue.Kind() != reflect.Map {
 		return
@@ -245,6 +244,27 @@ func (d *Dino) saveMap(in interface{}) {
 	_, err = d.session.PutItem(&request)
 	if err != nil {
 		d.LastAction.Error = err
+	}
+
+	does := inType.Implements(reflect.TypeOf((*saver)(nil)).Elem())
+
+	if does {
+		method, ok := inType.MethodByName("AfterSave")
+		if !ok {
+			d.LastAction.Error = errors.New("cannot access AfterSave function on supplied type")
+			return
+		}
+
+		returnValues := method.Func.Call([]reflect.Value{reflect.ValueOf(in)})
+
+		if len(returnValues) > 0 {
+			returnValue := returnValues[0].Interface()
+
+			if returnValue != nil {
+				d.LastAction.Error = returnValue.(error)
+			}
+		}
+
 	}
 
 	return

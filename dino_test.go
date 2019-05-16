@@ -39,3 +39,13 @@ func TestStructSave(t *testing.T) {
 
 	d.Save(test)
 }
+
+func TestMapTypePost(t *testing.T) {
+	table := "dino"
+	d := NewDino(nil, &table, "id")
+
+	test := TestOuterPersonMap{}
+	test["id"] = "TestPost"
+
+	d.Save(test)
+}

@@ -15,7 +15,13 @@ type TestOuterPerson struct {
 	Flotsom      interface{}
 }
 
+type TestOuterPersonMap map[string]interface{}
+
 func (p TestOuterPerson) AfterSave() error {
+	return nil
+}
+
+func (p TestOuterPersonMap) AfterSave() error {
 	return nil
 }
 
