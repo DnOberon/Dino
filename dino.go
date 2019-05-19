@@ -28,6 +28,7 @@ type Dino struct {
 	session     *dynamodb.DynamoDB
 	primaryKeys []string
 	tableName   *string
+	separator   string
 	LastAction  Action
 }
 
@@ -60,7 +61,12 @@ func NewDino(sess *session.Session, table *string, primaryKeys ...string) *Dino 
 		sess = session.Must(session.NewSession())
 	}
 
-	return &Dino{session: dynamodb.New(sess), primaryKeys: primaryKeys, tableName: table}
+	return &Dino{session: dynamodb.New(sess), primaryKeys: primaryKeys, tableName: table, separator: "#"}
+}
+
+// SetSeparator modifies the default flattening separator of "#"
+func (d *Dino) SetSeparator(separator string) {
+	d.separator = separator
 }
 
 // Save persists data to Dino.tableName. Accepts either a struct (with proper tags) or a map[string]interface{}
