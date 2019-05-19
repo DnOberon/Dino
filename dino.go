@@ -39,6 +39,7 @@ type saver interface {
 type Action struct {
 	RawAction  interface{}
 	Input      interface{}
+	Output     interface{}
 	ExecutedAt time.Time
 	Snapshot   instanceState
 	Error      error
